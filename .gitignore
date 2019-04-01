@@ -1,0 +1,17 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+data
+models
+*.dat
+*.zip
+*.zip
+-DQWINMAC03
+-DQWINMAC03.Rhistory
+-DQWINMAC03.RData
+Dist_and_Angle_03-DQWINMAC03.Rmd
+badhess.txt
+PH125_9_CYO_Report_cache
+PH125_9_CYO_Report_files
+
