@@ -27,6 +27,7 @@ options(repos="https://CRAN.R-project.org")
 # install.packages("doParallel", dependencies = TRUE)
 # install.packages("randomForest", dependencies = TRUE)
 # install.packages("rf")
+# install.packages("doMC")
 library(readr)
 library(tidyverse)
 library(ISLR)
@@ -105,7 +106,7 @@ x_test <- convert_quaternions_to_euler(x_test)
 # n_of_rows defaults to total number ofseries
 # is_train indicates that the data is training, thus will do an extra action
 pre_process <- function(a_dataframe, n_of_rows = nrow(a_dataframe)/128 ) {
-	
+
 	# get data grouped by seeries_id and compute some means 
 	processed_data_df <- a_dataframe %>% 
 	group_by(series_id) %>% 
@@ -144,19 +145,25 @@ pre_process <- function(a_dataframe, n_of_rows = nrow(a_dataframe)/128 ) {
 		) %>% 
 		slice(1:n_of_rows)
 	
-	# define an empty data frame with summary metrics that we'll use for each set of 128 observations
-	metrics <- c("dist_total","dist_max","dist_min","dist_max_to_min","dist_mean","dist_sd","dist_mean_to_sd",
-							 "omega_total","omega_max","omega_min","omega_max_to_min","omega_mean","omega_sd","omega_mean_to_sd",
-							 "phi_total","phi_max","phi_min","phi_mean","phi_sd","phi_mean_to_sd",
-							 "theta_total","theta_max","theta_min","theta_mean","theta_sd","theta_mean_to_sd",
-							 "psi_total","psi_max","psi_min","psi_mean","psi_sd","psi_mean_to_sd",
-							 "euler_total","euler_max","euler_min","euler_mean","euler_sd","euler_mean_to_sd")
-	tmp_df <- data.frame(matrix(ncol = length(metrics), nrow = 0) )
-	colnames(tmp_df) <- metrics
+	# # define an empty data frame with summary metrics that we'll use for each set of 128 observations
+	# metrics <- c("dist_total","dist_max","dist_min","dist_max_to_min","dist_mean","dist_sd","dist_mean_to_sd",
+	# 						 "omega_total","omega_max","omega_min","omega_max_to_min","omega_mean","omega_sd","omega_mean_to_sd",
+	# 						 "phi_total","phi_max","phi_min","phi_mean","phi_sd","phi_mean_to_sd",
+	# 						 "theta_total","theta_max","theta_min","theta_mean","theta_sd","theta_mean_to_sd",
+	# 						 "psi_total","psi_max","psi_min","psi_mean","psi_sd","psi_mean_to_sd",
+	# 						 "euler_total","euler_max","euler_min","euler_mean","euler_sd","euler_mean_to_sd")
+	# tmp_df <- data.frame(matrix(ncol = length(metrics), nrow = 0) )
+	# colnames(tmp_df) <- metrics
 
 	# loop over each series
 	# should use apply type of function here, but I use "for" until I master the apply
-	for (s_id in processed_data_df$series_id)
+	# for (s_id in processed_data_df$series_id)
+	# 
+	# 
+	# 
+	# 
+
+	result <- foreach (s_id = processed_data_df$series_id, .combine = rbind, .packages = c("tidyverse")) %dopar%
 	{
 		# get current measurement set
 		this_chunk_df <- a_dataframe %>% filter(series_id == s_id)
@@ -175,7 +182,8 @@ pre_process <- function(a_dataframe, n_of_rows = nrow(a_dataframe)/128 ) {
 		psi_v <- abs(diff(this_chunk_df$psi))
 
 		# fill or temp data frame with summary computations for our 128 measurement set
-		tmp_df <- bind_rows(tmp_df, data_frame(
+		##tmp_df <- bind_rows(tmp_df, data_frame(
+		tmp_df <- data_frame(
 			dist_total = sum(dist_v),
 			dist_max = max(dist_v),
 			dist_min = min(dist_v),
@@ -219,12 +227,16 @@ pre_process <- function(a_dataframe, n_of_rows = nrow(a_dataframe)/128 ) {
 			euler_mean = mean(phi_v + theta_v + psi_v),
 			euler_sd = sd(phi_v + theta_v + psi_v),
 			euler_mean_to_sd = mean(phi_v + theta_v + psi_v)/sd(phi_v + theta_v + psi_v)
-			))
+			)
+		
+		tmp_df
 	
 	} # end of for over series
 	
+	
+	
 	# add the summary computations to the data set of series
-	processed_data_df <- bind_cols(processed_data_df, tmp_df)
+	processed_data_df <- bind_cols(processed_data_df, result)
 
 	# more features
 	processed_data_df <- processed_data_df %>% mutate(
@@ -240,6 +252,10 @@ pre_process <- function(a_dataframe, n_of_rows = nrow(a_dataframe)/128 ) {
 
 
 ```{r preprocess both train and test data and save}
+cl <- makePSOCKcluster(10)
+registerDoParallel(cl)
+
+
 
 # pre-process train and test data sets
 tic("process train data")
@@ -249,6 +265,9 @@ toc()
 tic("process test data")
 x_test_processed <- pre_process(x_test)
 toc()
+
+stopCluster(cl)
+
 
 # rejoin train data with the labels data set
 x_train_processed <- x_train_processed %>% left_join(y_train, by = "series_id")
@@ -904,4 +923,48 @@ write_csv(submission, file_name)
 
 ## Parallelism Study
 
+
+```{r}
+
+install.packages("doSNOW")
+library(foreach)
+
+cl <- makePSOCKcluster(10)
+registerDoParallel(cl)
+
+library(doMC)
+library(doSNOW)
+```
+
+```{r}
+
+
+ret <-foreach(i = 1:20) %dopar%
+{
+	sqrt(i)
+	i^2
+}
+
+ret <-foreach(i = 1:20, .combine = rbind ) %dopar%
+{
+	sqrt(i)
+}
+
+ret
+
+
+# split a data frame by row, and put them back together again without
+# changing anything
+d <- data.frame(x=1:10, y=rnorm(10))
+s <- foreach(d=iter(d, by='row'), .combine=rbind) %dopar% d
+identical(s, d)
+ 
+
+```
+
+```{r}
+
+stopCluster(cl)
+
+```
 
