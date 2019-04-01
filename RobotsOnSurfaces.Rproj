@@ -1,0 +1,17 @@
+Version: 1.0
+
+RestoreWorkspace: Default
+SaveWorkspace: Ask
+AlwaysSaveHistory: Default
+
+EnableCodeIndexing: Yes
+UseSpacesForTab: No
+NumSpacesForTab: 4
+Encoding: UTF-8
+
+RnwWeave: Sweave
+LaTeX: pdfLaTeX
+
+StripTrailingWhitespace: Yes
+
+QuitChildProcessesOnExit: Yes
