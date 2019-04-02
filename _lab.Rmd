@@ -23,7 +23,7 @@ library(NoiseFiltersR)
 
 x_noise <- x_train_processed %>% select(-series_id, -group_id)
 
-x_noise2 <- edgeBoostFilter(surface ~ ., x_noise)
+x_noise2 <- edgeBoostFilter(surface ~ phi_mean_all + theta_mean_all + psi_mean_all, x_noise)
 
 x_noise2
 x_noise2$cleanData
