@@ -1,0 +1,260 @@
+---
+title: "Data_as_Signal"
+author: "Marian Dumitrascu"
+date: "April 2, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+options(repos="https://CRAN.R-project.org")
+# install.packages("ISLR")
+# install.packages("orientlib")
+# install.packages("RSpincalc")
+# devtools::install_github("collectivemedia/tictoc")
+# install.packages("kableExtra")
+# install.packages("doParallel", dependencies = TRUE)
+# install.packages("randomForest", dependencies = TRUE)
+# install.packages("rf")
+# install.packages("doMC")
+library(readr)
+library(tidyverse)
+library(ISLR)
+library(caret)
+library(orientlib)
+library(matrixStats)
+library(randomForest)
+library(RSpincalc)
+library(tictoc)
+library(kableExtra)
+
+library(doParallel)
+library(foreach)
+
+# library(nnet)
+
+library(mlbench)
+```
+
+
+## read the data
+
+```{r}
+
+x_train <- read_csv("data/X_train.csv")
+y_train <- read_csv("data/y_train.csv")
+x_test <- read_csv("data/x_test.csv")
+
+
+# join the labels with the training data set
+x_train <- x_train %>% left_join(y_train, by = "series_id")
+x_train <- as.data.frame(x_train)
+x_test <- as.data.frame(x_test)
+
+```
+
+
+
+
+
+```{r}
+
+x_tmp <- x_train %>% filter(series_id == 1)
+
+i <- 1
+x_tmp <- x_train %>% 
+	#filter(series_id == i-1) %>% 
+	select(linear_acceleration_X, linear_acceleration_Y, linear_acceleration_Z) 
+x_pca <- prcomp(x_tmp, center = TRUE, scale. = TRUE, rank. = 3)
+# x_pca
+summary(x_pca)
+# x_train$surface[i]
+
+x_tmp <- x_train %>% 
+	filter(series_id == i-1) %>% 
+	select(angular_velocity_X, angular_velocity_Y, angular_velocity_Z) %>% 
+	as.matrix()
+
+x_pca <- prcomp(x_tmp)
+# x_pca
+summary(x_pca)
+x_train$surface[i]
+
+
+
+x_tmp <- x_train %>% 
+	# filter(series_id == i-1) %>% 
+	select(orientation_X, orientation_Y, orientation_Z, orientation_W) %>% 
+	as.matrix()
+
+x_pca <- prcomp(x_tmp, center = TRUE, scale. = TRUE)
+x_pca
+summary(x_pca)
+
+
+i <- 1
+x_tmp <- x_train %>% 
+	filter(series_id == i-1) %>% 
+	select(linear_acceleration_X, linear_acceleration_Y, linear_acceleration_Z, orientation_X, orientation_Y,
+		   angular_velocity_X, angular_velocity_Y, angular_velocity_Z, orientation_Z, orientation_W) %>% 
+	as.matrix()
+
+x_pca <- prcomp(x_tmp, center = TRUE, scale. = TRUE)
+x_pca
+summary(x_pca)
+```
+
+```{r}
+i <- 2
+x_tmp <- x_train %>% 
+	filter(series_id == i-1) %>% 
+	select(linear_acceleration_X, linear_acceleration_Y, linear_acceleration_Z, orientation_X, orientation_Y,
+		   angular_velocity_X, angular_velocity_Y, angular_velocity_Z, orientation_Z, orientation_W) %>% 
+	as.matrix()
+
+x_pca <- prcomp(x_tmp, center = TRUE, scale. = TRUE)
+x_pca
+summary(x_pca)
+```
+
+```{r}
+i <- 200
+x_tmp <- x_train %>% 
+	filter(series_id == i-1) %>% 
+	select(linear_acceleration_X, linear_acceleration_Y, linear_acceleration_Z, orientation_X, orientation_Y,
+		   angular_velocity_X, angular_velocity_Y, angular_velocity_Z, orientation_Z, orientation_W) %>% 
+	as.matrix()
+
+x_pca <- prcomp(x_tmp, center = TRUE, scale. = TRUE)
+x_pca
+summary(x_pca)
+x_train$surface[i]
+
+```
+
+
+
+```{r}
+i <- 201
+x_tmp <- x_train %>% 
+	# filter(series_id == i-1) %>% 
+	select(linear_acceleration_X, linear_acceleration_Y, linear_acceleration_Z, 
+		   orientation_X, orientation_Y, orientation_Z, orientation_W,
+		   angular_velocity_X, angular_velocity_Y, angular_velocity_Z) # %>% as.matrix()
+
+x_pca <- prcomp(x_tmp, center = TRUE, scale. = TRUE)
+x_pca
+summary(x_pca)
+t <- data.frame(x_pca$x)
+x_train$surface[i]
+
+# bind train and test to compute pca together
+x_train_test <- bind_rows(
+	select(x_train, linear_acceleration_X, linear_acceleration_Y, linear_acceleration_Z, 
+		   orientation_X, orientation_Y, orientation_Z, orientation_W,
+		   angular_velocity_X, angular_velocity_Y, angular_velocity_Z),
+	select(x_test, linear_acceleration_X, linear_acceleration_Y, linear_acceleration_Z, 
+		   orientation_X, orientation_Y, orientation_Z, orientation_W,
+		   angular_velocity_X, angular_velocity_Y, angular_velocity_Z))
+
+# compute pca for merged data frame
+x_pca <- prcomp(x_train_test)
+summary(x_pca)
+
+# extract the data frame from pca for x_train
+# get the first 3 components which havee 93% of the variability
+x_pca_train <- data.frame(x_pca$x[,1:3]) %>% slice(1:nrow(x_train))
+
+# extract the data frame from pca for x_test
+start <- nrow(x_train)+1
+end <- nrow(x_train)+nrow(x_test)+1
+x_pca_test <- data.frame(x_pca$x[,1:3]) %>% slice(start:end)
+nrow(x_pca_test)/128
+
+# reconstruct x_train
+x_train_pca <- bind_cols(select(x_train, series_id, group_id, surface), x_pca_train)
+
+# reconstruct x_test
+x_test_pca <- bind_cols(select(x_test, series_id), x_pca_test)
+
+x_train_pca %>% distinct(surface)
+```
+
+```{r plots,fig.width=8, fig.height=20}
+
+n <- 20
+x <- rep(1:128, n)
+end <- n*128
+surface_current <- "wood"
+
+y <- x_train_pca %>% filter(surface == surface_current) %>% slice(1:end)
+# y %>%  ggplot() +
+# 	geom_line(aes(x, PC1, col="blue")) +
+# 
+# 		facet_grid(series_id ~ PC1) 
+	
+# y %>%  ggplot(aes(x = x, y=PC1)) + 
+#     geom_line() +
+# 	facet_grid(y$series_id)
+# 	
+p <- ggplot(y) + geom_line(aes(x, PC1, col=1)) + geom_line(aes(x, PC2, col=2)) + geom_line(aes(x, PC3, col=3))
+p + facet_grid(rows = vars(series_id, group_id)) +
+	ylim(-0.25, 0.25)
+
+```
+
+
+
+
+```{r}
+draw_sample <- x_train %>% 
+	mutate(
+	x = linear_acceleration_X, 
+	y = linear_acceleration_Y, 
+	z = linear_acceleration_Z)
+
+series <- c(207)
+	
+
+draw_set <- draw_sample %>% 
+	filter(series_id %in% series)
+
+draw_set %>% ggplot(aes(z, y, col=x)) +
+	geom_path() +
+	facet_wrap(~series_id) + 
+	ggtitle(label = "Robot path ")
+```
+
+```{r , fig.height=10}
+
+x_train_pca %>% filter(PC1<0.5 & PC1>-0.5) %>% 
+    gather(key = "feature", value = "value", PC1, PC2, PC3) %>%
+    filter(feature %in% c('PC1', 'PC2' , 'PC3')) %>%  
+    ggplot(aes(x = value, fill=surface)) + 
+    geom_density() +
+	facet_grid(surface ~ feature) +
+	xlim(-5, 5)
+
+
+```
+
+
+
+## FFT
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
