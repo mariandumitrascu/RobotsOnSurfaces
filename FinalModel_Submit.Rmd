@@ -26,7 +26,7 @@ registerDoParallel(cl)
 x_train_for_train_ova <- x_train_processed
 
 # a prefix to save models on hdd
-model_prefix <- "model_22_fit_final_"
+model_prefix <- "model_23_fit_final_"
 
 # get surfaces in a data frame, so we can loop over
 surfaces <- x_train_for_train_ova %>% group_by(surface) %>% 
@@ -66,7 +66,7 @@ foreach(current_surface = surfaces$surface, .packages = c("tidyverse", "caret", 
 		customRF$levels 		<- 	function(x) x$surface
 				
 		model_fit_current <- train(surface ~ ., 
-															 data = select(x_train_for_train_ova_current, -series_id), 
+															 data = select(x_train_for_train_ova_current, -series_id, -group_id), 
 															 method=customRF, 
 															 metric="ROC", 
 															 tuneGrid=tunegrid, 
