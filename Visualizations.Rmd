@@ -33,7 +33,7 @@ library(plot3D)
 library(plotly)
 
 # install.packages("brnn", dependencies = TRUE)
-library(brnn)			# Bayesian Regularized Neural Networks
+# library(brnn)			# Bayesian Regularized Neural Networks
 
 library(nnet)			# Model Averaged Neural Network
 
@@ -44,7 +44,7 @@ library(monmlp)  	# Monotone Multi-Layer Perceptron Neural Network
 library(RSNNS)			# Multilayer Perceptron
 
 
-install.packages("keras", dependencies = TRUE)
+# install.packages("keras", dependencies = TRUE)
 ```
 
 
@@ -118,13 +118,52 @@ x_train_processed %>%  ggplot(aes(phi_mean_all, psi_mean_all, fill = surface)) +
 # this is a circle
 x_train_processed %>%  ggplot(aes(theta_mean_all, psi_mean_all, fill = surface)) +
 	geom_point(aes(color = surface)) +
-	geom_point(cex=6, pch=21)
+	geom_point(cex=6, pch=21) +
+	xlim(-2,2) +
+	ylim(-2,2)
 
-# this is a wave
-x_train_processed %>%  ggplot(aes(theta_mean_all, phi_mean_all, fill = surface)) +
+# qq %>%  ggplot(aes(theta_mean_all, psi_mean_all, fill = surface)) +
+# 	geom_point(aes(color = surface)) +
+# 	geom_point(cex=6, pch=21) +
+# 	xlim(-2,2) +
+# 	ylim(-2,2)
+	
+
+# this is a sinusoid
+x_train_processed %>%  ggplot(aes(phi_mean_all, theta_mean_all, fill = surface)) +
+	geom_point(aes(color = surface)) +
+	geom_point(cex=6, pch=21) +
+	xlim(-2,2) +
+	ylim(-2,2)
+# +
+# 	plot(t,y,type="l", xlab="time", ylab="Sine wave")
+qq %>%  ggplot(aes(theta_mean_all, psi_mean_all, fill = surface)) +
+	geom_point(aes(color = surface)) +
+	geom_point(cex=6, pch=21) +
+	xlim(-2,2) +
+	ylim(-2,2)
+
+qq %>%  ggplot(aes(phi_mean_all, theta_mean_all, fill = surface)) +
+	geom_point(aes(color = surface)) +
+	geom_point(cex=6, pch=21) +
+	xlim(-2,2) +
+	ylim(-2,2)
+
+t=seq(-2,2,0.1)
+y=2*sin(2*t)
+plot(t,y,type="l", xlab="time", ylab="Sine wave")
+max(x_train_processed$phi_mean_all)
+max(x_train_processed$theta_mean_all)
+
+max(y)
+
+x_train_processed %>%  ggplot(aes(asin(phi_mean_all/2), theta_mean_all, fill = surface)) +
 	geom_point(aes(color = surface)) +
 	geom_point(cex=6, pch=21)
 
+```
+
+```{r}
 x_train_processed %>%  ggplot(aes(abs(atan(dist_mean_to_sd/omega_mean_to_sd)), atan(theta_mean_all/psi_mean_all), fill = surface)) +
 	geom_point(aes(color = surface)) +
 	geom_point(cex=5, pch=21)
@@ -146,6 +185,8 @@ x_train_processed %>%  ggplot(aes(log(dist_mean_to_sd*omega_mean_to_sd), abs(ata
 	geom_point(cex=5, pch=21)
 
 # #####################################################################################################
+# 
+
 ```
 
 
@@ -277,6 +318,16 @@ x_test_processed %>%  ggplot(aes(dist_total, euler_total, fill = surface)) +
 
 x_test_processed %>%  ggplot(aes(sqrt(dist_total^2 + omega_total^2), omega_total/dist_total, fill = surface)) +
 	geom_point(aes(color = surface))
+#########
+x_train_processed %>%  ggplot(aes(phi_mean_all, psi_mean_all)) +
+	geom_point(cex=6, pch=21)
+
+x_test_processed %>%  ggplot(aes(theta_mean_all, psi_mean_all)) + 
+	geom_point(cex=6, pch=21)
+
+# this is a sinusoid
+x_test_processed %>%  ggplot(aes(phi_mean_all, theta_mean_all)) +
+	geom_point(cex=6, pch=21)
 
 ```
 

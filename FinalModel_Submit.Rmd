@@ -20,10 +20,13 @@ Qw will save each modeel on a file on hard-disk
 
 ```{r one-vs-all}
 
+cl <- makePSOCKcluster(10)
+registerDoParallel(cl)
+
 x_train_for_train_ova <- x_train_processed
 
 # a prefix to save models on hdd
-model_prefix <- "model_13_fit_final_"
+model_prefix <- "model_22_fit_final_"
 
 # get surfaces in a data frame, so we can loop over
 surfaces <- x_train_for_train_ova %>% group_by(surface) %>% 
@@ -32,7 +35,7 @@ surfaces <- x_train_for_train_ova %>% group_by(surface) %>%
 	# filter(surface == "hard_tiles") %>% 
 	arrange(n)
 
-for(current_surface in surfaces$surface)
+foreach(current_surface = surfaces$surface, .packages = c("tidyverse", "caret", "randomForest")) %dopar%
 {
 	
 		# do training of full train data
@@ -51,11 +54,12 @@ for(current_surface in surfaces$surface)
 														search="grid", 
 														classProbs = TRUE, 
 														summaryFunction = twoClassSummary,
-														sampling = "up")
+														sampling = "up",
+								allowParallel = FALSE)
 		customRF 						<- 	list(type = "Classification", library = "randomForest", loop = NULL)
-		customRF$parameters <- 	data.frame(parameter = c("mtry", "ntree"), class = rep("numeric", 2), label = c("mtry", "ntree"))
+		customRF$parameters 	<- 	data.frame(parameter = c("mtry", "ntree"), class = rep("numeric", 2), label = c("mtry", "ntree"))
 		customRF$grid 			<- 	function(x, y, len = NULL, search = "grid") {}
-		customRF$fit 				<- 	function(x, y, wts, param, lev, last, weights, classProbs, ...) randomForest(x, y, mtry = param$mtry, ntree=param$ntree, ...)
+		customRF$fit 			<- 	function(x, y, wts, param, lev, last, weights, classProbs, ...) randomForest(x, y, mtry = param$mtry, ntree=param$ntree, ...)
 		customRF$predict 		<- 	function(modelFit, newdata, preProc = NULL, submodels = NULL) predict(modelFit, newdata)
 		customRF$prob 			<- 	function(modelFit, newdata, preProc = NULL, submodels = NULL)	predict(modelFit, newdata, type = "prob")
 		customRF$sort 			<- 	function(x) x[order(x[,1]),]
@@ -74,7 +78,7 @@ for(current_surface in surfaces$surface)
 		write_rds(model_fit_current, file)
 }
 
-
+stopCluster(cl)
 ```
 
 
