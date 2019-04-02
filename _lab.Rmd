@@ -21,8 +21,16 @@ When you click the **Knit** button a document will be generated that includes bo
 
 library(NoiseFiltersR)
 
+x_noise <- x_train_processed %>% select(-series_id, -group_id)
 
+x_noise2 <- edgeBoostFilter(surface ~ ., x_noise)
 
+x_noise2
+x_noise2$cleanData
+x_noise2$remIdx
+# out_For <- edgeBoostFilter(Species~., iris)
+
+x_train_processed <- x_train_processed[-x_noise2$remIdx,]
 
 ```
 
