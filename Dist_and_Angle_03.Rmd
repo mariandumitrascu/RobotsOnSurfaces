@@ -546,14 +546,20 @@ y_hat <- predict(model_fit, select(x_train_for_test, -series_id))
 conf_matrix <- confusionMatrix(y_hat, x_train_for_test$surface)
 conf_matrix$overall["Accuracy"]
 
+```
 
+```{r}
 # #########
 # svm
-fitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 3, classProbs = TRUE)
+tuneGrid = data.frame(.C = c(.25, .5, 1), .sigma = .05)
+grid <- expand.grid(C = c(0,0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2,5))
+fitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 2, classProbs = TRUE)
 x <- x_train_for_train %>% select(-series_id, -group_id) #%>% slice(1:500)
-model_fit <- train(surface ~ ., data = x, 
-                 method = "svmRadial", 
-                 trControl = fitControl
+model_fit <- train(surface ~ ., 
+		data = x, 
+		method = "svmRadial", 
+		trControl = fitControl,
+		tuneGrid = tuneGrid		 
 )
 
 y_hat <- predict(model_fit, select(x_train_for_test, -series_id))
