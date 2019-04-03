@@ -19,6 +19,9 @@ options(repos="https://CRAN.R-project.org")
 # install.packages("randomForest", dependencies = TRUE)
 # install.packages("rf")
 # install.packages("doMC")
+# install.packages("waveslim")
+# install.packages("signal")
+library(signal)
 library(readr)
 library(tidyverse)
 library(ISLR)
@@ -37,6 +40,9 @@ library(foreach)
 
 library(mlbench)
 library(stats)
+library(waveslim)
+
+
 ```
 
 
@@ -277,7 +283,7 @@ surface_current <- "wood"
 
 y <- x_train_pca %>% filter(surface == surface_current) %>% slice(1:end)
 
-p <- ggplot(y) + geom_line(aes(x, abs(fft(PC1, inverse = TRUE)), col=1))  #+ geom_line(aes(x, Re(fft(PC2)), col=2)) #+ geom_line(aes(x, PC3, col=3))
+p <- ggplot(y) + geom_line(aes(x, abs(fft(PC1, inverse = FALSE)), col=1))  #+ geom_line(aes(x, Re(fft(PC2)), col=2)) #+ geom_line(aes(x, PC3, col=3))
 p + facet_grid(rows = vars(series_id, group_id))
 ```
 
@@ -286,18 +292,92 @@ p + facet_grid(rows = vars(series_id, group_id))
 
 
 ```{r}
-# install.packages("waveslim")
-library(waveslim)
+
+# detach(package:signal)
 z <- x_train_pca %>% filter(series_id == 3) 
-dwt(z$PC1, wf="la8", n.levels=4, boundary="periodic")
+
+x_dwt <- dwt(z$PC1, wf="la8", n.levels=6, boundary="periodic")
+x_dwt <- dwt(z$PC1, wf="d4", n.levels=6, boundary="periodic")
 # dwt.nondyadic(z$PC1)
+# summary(x_dwt)
+x_dwt$d6[1]
 
-z <- x_train_pca %>% filter(series_id == 200) 
-dwt(z$PC1, wf="la8", n.levels=4, boundary="periodic")
+xx = 1:32
+ggplot() + geom_line(aes(xx, x_dwt$d2))
 
-deno
+z <- x_train_pca %>% filter(series_id == 23) 
+x_dwt <- dwt(z$PC1, wf="la8", n.levels=7, boundary="periodic")
+# summary(x_dwt)
+xx = 1:32
+ggplot() + geom_line(aes(xx, x_dwt$d2))
+
+
+z <- x_train_pca %>% filter(series_id == 23) 
+x_dwt <- modwt(z$PC1, wf="la8", n.levels=6, boundary="periodic")
+
+xx = 1:128
+ggplot() + geom_line(aes(xx, x_dwt$d3))
+
+z <- x_train_pca %>% filter(series_id == 219) 
+xx = 1:8
+x_dwt <- dwt.nondyadic(z$PC1)
+ggplot() + geom_line(aes(xx, dwt.nondyadic(z$PC1)$s4))
+first(z$surface)
 ```
 
+
+
+```{r fig.width=13, fig.height=10, fig.retina=4}
+
+x_series <- x_train_pca %>% group_by(series_id) %>% summarize(
+	surface = first(surface)
+)
+
+metrics <- c("d1", "d2")
+tmp_df <- data.frame(matrix(ncol = length(metrics), nrow = 0) )
+colnames(tmp_df) <- metrics
+
+for(s_id in x_series$series_id){
+	
+		# get current measurement set
+		z <- x_train_pca %>% filter(series_id == s_id)
+		#x_dwt <- dwt(z$PC2, wf="la8", n.levels=6, boundary="periodic")
+		
+		# v <- abs(fft(z$PC1, inverse = FALSE))
+		# x_dwt <- dwt(v, wf="la8", n.levels=6, boundary="periodic")
+		# 
+		# tmp_df <- bind_rows(tmp_df, data.frame(
+		# 	d1 = x_dwt$s6[1],
+		# 	d2 = x_dwt$s6[2]
+		# ))
+		
+		v <- abs(fft(z$PC1, inverse = FALSE))
+		# v <- z$PC1
+		
+		# x_dwt <- dwt(v, wf="la8", n.levels=7, boundary="periodic")
+		x_dwt <- dwt(v, wf="haar", n.levels=7, boundary="periodic")
+		
+		tmp_df <- bind_rows(tmp_df, data.frame(
+			d1 = x_dwt$s7[1],
+			d2 = x_dwt$d5[2]
+		))		
+		
+		
+}
+
+x_train_p_dwt <- bind_cols(x_series, tmp_df)
+
+
+x_train_p_dwt %>%  ggplot(aes(d1, d2, fill = surface)) +
+	geom_point(aes(color = surface)) + 
+	geom_point(cex=6, pch=21) # + xlim(-10, 0) + ylim(0, 20)
+
+```
+
+```{r fig.width=13, fig.height=10, fig.retina=4}
+cat("dsfdsfdsf")
+
+```
 
 ## Decompose
 
@@ -310,7 +390,14 @@ stl(fft(z$PC1))
 ```
 
 
+## Lo High Filter
+Using signal library
 
+```{}
+
+
+
+```
 
 
 

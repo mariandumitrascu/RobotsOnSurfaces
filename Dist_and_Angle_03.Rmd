@@ -463,7 +463,7 @@ x_train_processed$s <- NULL
 ```{r}
 # ########################################################################################################
 # partition x_train_processed data for training and testing 
-test_index <- createDataPartition(y = x_train_processed$surface, times = 1, p = 0.5, list = FALSE)
+test_index <- createDataPartition(y = x_train_processed$surface, times = 1, p = 0.25, list = FALSE)
 x_train_for_train <- x_train_processed[-test_index, ]
 x_train_for_test <- x_train_processed[test_index, ]
 
@@ -545,6 +545,26 @@ model_fit <- train(surface ~ ., data = x,
 y_hat <- predict(model_fit, select(x_train_for_test, -series_id))
 conf_matrix <- confusionMatrix(y_hat, x_train_for_test$surface)
 conf_matrix$overall["Accuracy"]
+
+
+# #########
+# svm
+fitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 3, classProbs = TRUE)
+x <- x_train_for_train %>% select(-series_id, -group_id) #%>% slice(1:500)
+model_fit <- train(surface ~ ., data = x, 
+                 method = "svmRadial", 
+                 trControl = fitControl
+)
+
+y_hat <- predict(model_fit, select(x_train_for_test, -series_id))
+conf_matrix <- confusionMatrix(y_hat, x_train_for_test$surface)
+conf_matrix$overall["Accuracy"]
+```
+
+
+
+
+```{r}
 
 ###
 x <- x_train_for_train %>% select(-series_id, -group_id) %>% slice(1:5000)
