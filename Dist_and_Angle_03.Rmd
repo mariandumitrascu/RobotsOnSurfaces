@@ -597,7 +597,8 @@ write_csv(x_test_processed_for_submission, "data/submission_C50_02.csv")
 ```{r}
 
 # use most important variables to fit KNN
-model_fit <- train(surface ~ f3 + f2 + f3 + phi_mean_all + theta_mean_all + psi_mean_all,  method = "knn", 
+# model_fit <- train(surface ~ f3 + f2 + f3 + phi_mean_all + theta_mean_all + psi_mean_all,  method = "knn", 
+model_fit <- train(surface ~ .,  method = "knn", 
              tuneGrid = data.frame(k = seq(2, 100, 2)), 
              data = select(x_train_for_train, -series_id, -group_id))
 
@@ -665,7 +666,7 @@ confusionMatrix(predict(model_fit, x_train_for_test), x_train_for_test$surface)$
 ```{r, fig.height=9, fig.width = 16}
 
 model_fit <- randomForest(
-	surface ~ f3 + f2 + f3 + phi_mean_all + theta_mean_all + psi_mean_all, 
+	surface ~ . , 
 	metric = "Accuracy", 
 	data = slice(select(x_train_for_train, -series_id, -group_id), 1:5000)
 	)
@@ -680,7 +681,10 @@ conf_matrix$table %>% knitr::kable()
 importance <- importance(model_fit)
 # importance[order(importance[,1], decreasing = TRUE), ]
 varImpPlot(model_fit)
+```
 
+
+```{r}
 model_fit <- randomForest(
 	surface ~ ., 
 	metric = "Accuracy", 

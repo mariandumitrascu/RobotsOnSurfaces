@@ -313,16 +313,18 @@ ggplot() + geom_line(aes(xx, x_dwt$d2))
 
 
 z <- x_train_pca %>% filter(series_id == 23) 
-x_dwt <- modwt(z$PC1, wf="la8", n.levels=6, boundary="periodic")
+x_dwt <- modwt(z$PC1, wf="haar", n.levels=6, boundary="periodic")
 
 xx = 1:128
 ggplot() + geom_line(aes(xx, x_dwt$d3))
+```
 
-z <- x_train_pca %>% filter(series_id == 219) 
-xx = 1:8
-x_dwt <- dwt.nondyadic(z$PC1)
-ggplot() + geom_line(aes(xx, dwt.nondyadic(z$PC1)$s4))
-first(z$surface)
+```{r}
+z <- x_train_pca %>% filter(series_id == sample_n(x_train_pca %>% filter(surface =="concrete"), 1)$series_id)
+xx = 1:128
+x_dwt <- modwt(z$PC1, wf="haar", n.levels=6, boundary="periodic")
+ggplot() + geom_line(aes(xx, abs(fft(x_dwt$d6))))
+
 ```
 
 
@@ -330,10 +332,11 @@ first(z$surface)
 ```{r fig.width=13, fig.height=10, fig.retina=4}
 
 x_series <- x_train_pca %>% group_by(series_id) %>% summarize(
-	surface = first(surface)
+	surface = first(surface),
+	group_id = first(group_id)
 )
 
-metrics <- c("d1", "d2")
+metrics <- c("d1", "d2", "d3", "d4", "d5", "d6")
 tmp_df <- data.frame(matrix(ncol = length(metrics), nrow = 0) )
 colnames(tmp_df) <- metrics
 
@@ -341,27 +344,27 @@ for(s_id in x_series$series_id){
 	
 		# get current measurement set
 		z <- x_train_pca %>% filter(series_id == s_id)
-		#x_dwt <- dwt(z$PC2, wf="la8", n.levels=6, boundary="periodic")
+		# v1 <- abs(fft(z$PC1, inverse = FALSE))
+		# v2 <- abs(fft(z$PC2, inverse = FALSE))
+		# v3 <- abs(fft(z$PC3, inverse = FALSE))
 		
-		# v <- abs(fft(z$PC1, inverse = FALSE))
-		# x_dwt <- dwt(v, wf="la8", n.levels=6, boundary="periodic")
-		# 
-		# tmp_df <- bind_rows(tmp_df, data.frame(
-		# 	d1 = x_dwt$s6[1],
-		# 	d2 = x_dwt$s6[2]
-		# ))
-		
-		v <- abs(fft(z$PC1, inverse = FALSE))
-		# v <- z$PC1
+		v1 <- z$PC1
+		v2 <- z$PC2
+		v3 <- z$PC3
 		
 		# x_dwt <- dwt(v, wf="la8", n.levels=7, boundary="periodic")
-		x_dwt <- dwt(v, wf="haar", n.levels=7, boundary="periodic")
+		x_dwt_1 <- dwt(v1, wf="haar", n.levels=7, boundary="periodic")
+		x_dwt_2 <- dwt(v2, wf="haar", n.levels=7, boundary="periodic")
+		x_dwt_3 <- dwt(v3, wf="haar", n.levels=7, boundary="periodic")
 		
 		tmp_df <- bind_rows(tmp_df, data.frame(
-			d1 = x_dwt$s7[1],
-			d2 = x_dwt$d5[2]
-		))		
-		
+			d1 = x_dwt_1$d7[1],
+			d2 = x_dwt_1$s7[1],
+			d3 = x_dwt_2$d7[1],
+			d4 = x_dwt_2$s7[1],
+			d5 = x_dwt_3$d7[1],
+			d6 = x_dwt_3$s7[1]
+		))	
 		
 }
 
@@ -374,26 +377,27 @@ x_train_p_dwt %>%  ggplot(aes(d1, d2, fill = surface)) +
 
 ```
 
-```{r fig.width=13, fig.height=10, fig.retina=4}
-cat("dsfdsfdsf")
-
-```
 
 ## Decompose
 
 ```{r}
 
-x_deco <- decompose(Re(fft(z$PC1)) )
-z <- x_train_pca %>% filter(series_id == 4) 
-stl(fft(z$PC1))
+# x_deco <- decompose(x_dwt_1$d1 )
+# z <- x_train_pca %>% filter(series_id == 4) 
+# stl(x_dwt_1$d1)
 
 ```
 
 
-## Lo High Filter
-Using signal library
+## 
 
-```{}
+
+```{r}
+x_train_p_dwt <- x_train_p_dwt %>% mutate(surface = as.factor(surface))
+
+test_index <- createDataPartition(y = x_train_p_dwt$surface, times = 1, p = 0.25, list = FALSE)
+x_train_for_train <- x_train_p_dwt[-test_index, ]
+x_train_for_test <- x_train_p_dwt[test_index, ]
 
 
 
