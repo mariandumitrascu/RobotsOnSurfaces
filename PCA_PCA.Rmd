@@ -22,7 +22,7 @@ options(repos="https://CRAN.R-project.org")
 # install.packages("waveslim")
 # install.packages("signal")
 # library(signal)
-# devtools::install_github("rstudio/keras")
+# 
 library(readr)
 library(tidyverse)
 library(ISLR)
