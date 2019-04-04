@@ -135,6 +135,10 @@ x_train_processed %>%  ggplot(aes(phi_mean_all, theta_mean_all, fill = surface))
 	geom_point(cex=6, pch=21) +
 	xlim(-2,2) +
 	ylim(-2,2)
+
+x_train_processed %>%  ggplot(aes(psi_mean_all, theta_mean_all/sin(phi_mean_all), fill = surface)) +
+	geom_point(aes(color = surface)) +
+	geom_point(cex=6, pch=21)
 ```
 
 

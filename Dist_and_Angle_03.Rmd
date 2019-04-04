@@ -7,17 +7,7 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
-# Surface Detection by Robot Movements
 
-
-## Introduction
-
-gyros, accelerometer and magnetometer sensor
-
-## Load Libraries
-
-```{r data load, message=FALSE, warning=FALSE}
 options(repos="https://CRAN.R-project.org")
 # install.packages("ISLR")
 # install.packages("orientlib")
@@ -45,6 +35,18 @@ library(foreach)
 # library(nnet)
 
 library(mlbench)
+```
+# Surface Detection by Robot Movements
+
+
+## Introduction
+
+gyros, accelerometer and magnetometer sensor
+
+## Load Libraries
+
+```{r data load, message=FALSE, warning=FALSE}
+
 
 ```
 
@@ -255,8 +257,6 @@ pre_process <- function(a_dataframe, n_of_rows = nrow(a_dataframe)/128 ) {
 cl <- makePSOCKcluster(8)
 registerDoParallel(cl)
 
-
-
 # pre-process train and test data sets
 tic("process train data")
 x_train_processed <- pre_process(x_train)
@@ -283,14 +283,7 @@ rm(x_train_processed, x_test_processed)
 
 ```{r load data and partition, echo=TRUE, message=FALSE, warning=FALSE}
 
-x_train_processed_from_file <- read_csv("data/x_train_processed.csv")
-x_test_processed_from_file <- read_csv("data/x_test_processed.csv")
 
-# if we load data from a file, convert surface to factor
-x_train_processed_from_file <- x_train_processed_from_file %>% mutate(surface = as.factor(surface))
-
-# use a smaller set of datab to save time
-x_train_processed_from_file <- x_train_processed_from_file # %>% slice(1:1000)
 
 
 
@@ -301,37 +294,47 @@ x_train_processed_from_file <- x_train_processed_from_file # %>% slice(1:1000)
 
 ```{r include=FALSE}
 
+x_train_processed_from_file <- read_csv("data/x_train_processed.csv")
+x_test_processed_from_file <- read_csv("data/x_test_processed.csv")
+
+# if we load data from a file, convert surface to factor
+x_train_processed_from_file <- x_train_processed_from_file %>% mutate(surface = as.factor(surface))
+
+# use a smaller set of datab to save time
+x_train_processed_from_file <- x_train_processed_from_file # %>% slice(1:1000)
+
+
 x_test_processed <- x_test_processed_from_file
 
 # remove group_id
 x_train_processed <- x_train_processed_from_file # %>% select(-group_id)
 
-# rm(x_test_processed_from_file, x_train_processed_from_file)
+rm(x_test_processed_from_file, x_train_processed_from_file)
 
-s8 <- read_csv("data/submission_08.csv")
-s6 <- read_csv("data/submission_06.csv")
-s5 <- read_csv("data/submission_05.csv")
-s4 <- read_csv("data/submission_04.csv")
-s3 <- read_csv("data/submission_03.csv")
-s2 <- read_csv("data/submission_RF_untuned0_02.csv")
-s10 <- read_csv("data/model_10_fit_submission.csv")
-s11 <- read_csv("data/model_11_fit_submission.csv")
-
-x_pool_sub <- s6 %>%
-	inner_join(s11, by = c("series_id", "surface")) %>% 
-	inner_join(s10, by = c("series_id", "surface")) %>% 
-	inner_join(s8, by = c("series_id", "surface")) %>% 
-	inner_join(s6, by = c("series_id", "surface")) %>% 
-	inner_join(s5, by = c("series_id", "surface")) %>% 
-	inner_join(s4, by = c("series_id", "surface")) %>% 
-	inner_join(s3, by = c("series_id", "surface")) %>% 
-	inner_join(s2, by = c("series_id", "surface")) 
-
-
-x_pool_sub <- x_test_processed %>% inner_join(x_pool_sub, by = "series_id") %>% 
-	mutate(series_id = series_id * 1000000)
-
-x_pool_sub <- x_pool_sub %>% mutate(surface = as.factor(surface))
+# s8 <- read_csv("data/submission_08.csv")
+# s6 <- read_csv("data/submission_06.csv")
+# s5 <- read_csv("data/submission_05.csv")
+# s4 <- read_csv("data/submission_04.csv")
+# s3 <- read_csv("data/submission_03.csv")
+# s2 <- read_csv("data/submission_RF_untuned0_02.csv")
+# s10 <- read_csv("data/model_10_fit_submission.csv")
+# s11 <- read_csv("data/model_11_fit_submission.csv")
+# 
+# x_pool_sub <- s6 %>%
+# 	inner_join(s11, by = c("series_id", "surface")) %>% 
+# 	inner_join(s10, by = c("series_id", "surface")) %>% 
+# 	inner_join(s8, by = c("series_id", "surface")) %>% 
+# 	inner_join(s6, by = c("series_id", "surface")) %>% 
+# 	inner_join(s5, by = c("series_id", "surface")) %>% 
+# 	inner_join(s4, by = c("series_id", "surface")) %>% 
+# 	inner_join(s3, by = c("series_id", "surface")) %>% 
+# 	inner_join(s2, by = c("series_id", "surface")) 
+# 
+# 
+# x_pool_sub <- x_test_processed %>% inner_join(x_pool_sub, by = "series_id") %>% 
+# 	mutate(series_id = series_id * 1000000)
+# 
+# x_pool_sub <- x_pool_sub %>% mutate(surface = as.factor(surface))
 
 # x_train_processed <- bind_rows(x_train_processed, x_pool_sub)
 
@@ -352,7 +355,7 @@ x_train_processed <- x_train_processed %>% select(-names_to_remove_test)
 x_test_processed <- x_test_processed %>% select(-names_to_remove_test) 
 
 rm(x_train_matrix, x_test_matrix, names_to_removed_train, names_to_remove_test)
-rm(s2, s3, s4, s5, s6, s8, s10, s11, x_pool_sub)
+# rm(s2, s3, s4, s5, s6, s8, s10, s11, x_pool_sub)
 
 # ########################################################################################################
 # pre-process the data, center and scale the values across all predictors
