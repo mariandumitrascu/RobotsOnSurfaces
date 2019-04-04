@@ -65,19 +65,41 @@ model_fit %>%
 		optimizer = optimizer_rmsprop(),
 		metrics = c("accuracy")
 	)
-
+summary(model_fit)
 ```
 
 ## Training and Evaluation
 
 ```{r}
+history <- model_fit %>% 
+	fit(
+		x_train, 
+		y_train,
+		epochs = 30, 
+		batch_sizee = 128,
+		validation_split = 0.2
+		)
+plot(history)
 
 ```
 
 
 
+## Evaluate
 
+```{r}
 
+model_fit %>% keras::evaluate(x_test, y_test)
+
+```
+
+## Generatee Predictions on New Data
+
+```{r}
+prediction <- model_fit %>% keras::predict_classes(x_test)
+head(prediction)
+
+```
 
 
 
