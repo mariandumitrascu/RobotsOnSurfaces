@@ -1,0 +1,95 @@
+---
+title: "Keras Robot Surfaces"
+author: "Marian Dumitrascu"
+date: "April 4, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(keras)
+library(caret)
+```
+
+## Load Data
+
+```{r}
+x_train <- read_csv("data/X_train.csv")
+y_train <- read_csv("data/y_train.csv")
+x_test <- read_csv("data/x_test.csv")
+
+
+# join the labels with the training data set
+x_train <- x_train %>% left_join(y_train, by = "series_id")
+x_train <- as.data.frame(x_train)
+x_test <- as.data.frame(x_test)
+```
+
+## Prepare Data
+
+```{r}
+pre_process <- x_train %>%
+	select(-series_id, -group_id, -measurement_number, -row_id, -group_id, -surface) %>% 
+	preProcess(method = c("range"))
+
+x_train_processed <- predict(pre_process, x_train)
+x_test_processed <- predict(pre_process, x_test)
+
+y_train_processed <- y_train %>% select(surface) %>% 
+	mutate(surface = as.factor(surface)) %>% 
+	mutate(surface = as.numeric(surface))
+
+map_surface_number <- y_train %>%
+	select(surface) %>% 
+	mutate(surface_num = as.numeric(as_factor(surface))) %>% 
+	distinct()
+
+
+y_train <- y_train %>%
+	mutate(surface_num = as.numeric(as.factor(surface)))
+
+y <- keras::to_categorical(as.matrix(y_train_processed -1),9)
+
+```
+
+## converting back to numbers
+
+```{r}
+
+tmp <- t(t(y) * c(1,2,3,4,5,6,7,8,9))
+tmp2 <- rowSums(tmp)
+tmp2 <- as.matrix(tmp2)
+tmp2 <- as.data.frame(tmp2)
+names(tmp2) <- c("surface_num")
+
+
+bind_cols(tmp2, y_train)
+```
+
+
+## Prepare x_train and x_test
+
+
+```{r}
+
+xx_train <- x_train_processed %>% select(linear_acceleration_X)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
