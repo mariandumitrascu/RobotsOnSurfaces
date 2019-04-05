@@ -152,7 +152,7 @@ for(s_id in x_series$series_id) {
 
 xx_train <- bind_cols(x_series, tmp_01, tmp_02, tmp_03)
 
-# x_dwt <- dwt(z$PC1, wf="la8", n.levels=7, boundary="periodic")
+# 
 
 ```
 
@@ -180,19 +180,22 @@ colnames(tmp_03) <- columns_03
 for(s_id in x_series$series_id) {
 	z <- x_train_pca %>% filter(series_id == s_id)
 	
+	x_dwt <- modwt(z$PC1, wf="haar", n.levels=7, boundary="periodic")
 	tmp_01 <- bind_rows(
 		tmp_01, 
-		bind_cols(data.frame(cols = columns_01), data.frame(PC1 = abs(fft(select(z, PC1)$PC1)))) %>% spread(cols, PC1)
+		bind_cols(data.frame(cols = columns_01), data.frame(PC1 = abs(fft(x_dwt$d2)) )) %>% spread(cols, PC1)
 		)
 	
+	x_dwt <- modwt(z$PC2, wf="haar", n.levels=7, boundary="periodic")
 	tmp_02 <- bind_rows(
 		tmp_02, 
-		bind_cols(data.frame(cols = columns_02), data.frame(PC2 = abs(fft(select(z, PC2)$PC2)))) %>% spread(cols, PC2)
+		bind_cols(data.frame(cols = columns_02), data.frame(PC2 = abs(fft(x_dwt$d2)) )) %>% spread(cols, PC2)
 		)
 	
+	x_dwt <- modwt(z$PC3, wf="haar", n.levels=7, boundary="periodic")
 	tmp_03 <- bind_rows(
 		tmp_03, 
-		bind_cols(data.frame(cols = columns_03), data.frame(PC3 = abs(fft(select(z, PC3)$PC3)))) %>% spread(cols, PC3)
+		bind_cols(data.frame(cols = columns_03), data.frame(PC3 =  abs(fft(x_dwt$d2)) )) %>% spread(cols, PC3)
 		)	
 }
 
@@ -253,11 +256,21 @@ xx_test <- bind_cols(x_series, tmp_01)
 
 model_fit <- keras::keras_model_sequential()
 model_fit %>% 
-	layer_dense(units = 256, activation = "relu", input_shape = c(128*3), name = "layer_one") %>% 
-	layer_dropout(rate = 0.4) %>% 
+	layer_dense(units = 128, activation = "relu", input_shape = c(128*3), name = "layer_one") %>% 
 	layer_dense(units = 128, activation = "relu") %>% 
+	layer_dense(units = 128, activation = "relu") %>% 
+	layer_dropout(rate = 0.4) %>% 
+	layer_dense(units = 64, activation = "relu") %>% 
 	layer_dropout(rate = 0.3) %>% 
 	layer_dense(units = 9, activation = "softmax")
+
+
+model_fit %>% 
+	compile(
+		loss = "categorical_crossentropy",
+		optimizer = optimizer_rmsprop(),
+		metrics = c("accuracy")
+	)
 
 summary(model_fit)
 
@@ -268,12 +281,6 @@ summary(model_fit)
 
 ```{r}
 
-model_fit %>% 
-	compile(
-		loss = "categorical_crossentropy",
-		optimizer = optimizer_rmsprop(),
-		metrics = c("accuracy")
-	)
 
 
 ```
@@ -289,7 +296,7 @@ history <- model_fit %>%
 	fit(
 		xxx_train, 
 		y,
-		epochs = 120, 
+		epochs = 140, 
 		batch_size = 100,
 		validation_split = 0.2
 		)
