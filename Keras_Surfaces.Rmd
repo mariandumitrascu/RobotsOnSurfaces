@@ -67,13 +67,136 @@ bind_cols(tmp2, y_train)
 ```
 
 
+## Apply PCA
+
+```{r}
+# bind train and test to compute pca together
+x_train_test <- bind_rows(
+	select(x_train, linear_acceleration_X, linear_acceleration_Y, linear_acceleration_Z, 
+		   orientation_X, orientation_Y, orientation_Z, orientation_W,
+		   angular_velocity_X, angular_velocity_Y, angular_velocity_Z),
+	select(x_test, linear_acceleration_X, linear_acceleration_Y, linear_acceleration_Z, 
+		   orientation_X, orientation_Y, orientation_Z, orientation_W,
+		   angular_velocity_X, angular_velocity_Y, angular_velocity_Z))
+
+# compute pca for merged data frame
+x_pca <- prcomp(x_train_test)
+summary(x_pca)
+
+# pre-process again
+xx <- data.frame(x_pca$x[,1:3])
+
+pre_process <- xx %>% preProcess(c("range"))
+xx <- predict(pre_process, xx)
+
+
+# extract the data frame from pca for x_train
+# get the first 3 components which havee 93% of the variability
+x_pca_train <- xx %>% slice(1:nrow(x_train))
+
+# extract the data frame from pca for x_test
+start <- nrow(x_train)+1
+end <- nrow(x_train)+nrow(x_test)+1
+x_pca_test <- data.frame(x_pca$x[,1:3]) %>% slice(start:end)
+
+# reconstruct x_train
+x_train_pca <- bind_cols(select(x_train, series_id, group_id, surface), x_pca_train)
+
+# reconstruct x_test
+x_test_pca <- bind_cols(select(x_test, series_id), x_pca_test)
+
+rm(x_pca_train, x_pca_test, xx)
+```
+
+
 ## Prepare x_train and x_test
 
 
 ```{r}
 
-xx_train <- x_train_processed %>% select(linear_acceleration_X)
+x_series <- x_train_pca %>% group_by(series_id) %>% summarize(
+	surface = first(surface),
+	group_id = first(group_id)
+)
 
+columns_01 <- paste("PC1_",as.character(10000 + c(1:128)), sep = "")
+tmp_01 <- data.frame(matrix(ncol = length(columns_01), nrow = 0) )
+colnames(tmp_01) <- columns_01
+
+columns_02 <- paste("PC2_",as.character(10000 + c(1:128)), sep = "")
+tmp_02 <- data.frame(matrix(ncol = length(columns_02), nrow = 0) )
+colnames(tmp_02) <- columns_02
+
+columns_03 <- paste("PC3_",as.character(10000 + c(1:128)), sep = "")
+tmp_03 <- data.frame(matrix(ncol = length(columns_03), nrow = 0) )
+colnames(tmp_03) <- columns_03
+
+for(s_id in x_series$series_id) {
+	z <- x_train_pca %>% filter(series_id == s_id)
+	
+	tmp_01 <- bind_rows(
+		tmp_01, 
+		bind_cols(data.frame(cols = columns_01), data.frame(PC1 = abs(fft(select(z, PC1)$PC1)))) %>% spread(cols, PC1)
+		)
+	
+	tmp_02 <- bind_rows(
+		tmp_02, 
+		bind_cols(data.frame(cols = columns_02), data.frame(PC2 = abs(fft(select(z, PC2)$PC2)))) %>% spread(cols, PC2)
+		)
+	
+	tmp_03 <- bind_rows(
+		tmp_03, 
+		bind_cols(data.frame(cols = columns_03), data.frame(PC3 = abs(fft(select(z, PC3)$PC3)))) %>% spread(cols, PC3)
+		)	
+}
+
+xx_train <- bind_cols(x_series, tmp_01, tmp_02, tmp_03)
+
+# x_dwt <- dwt(z$PC1, wf="la8", n.levels=7, boundary="periodic")
+
+```
+
+
+
+
+```{r}
+x_series <- x_train_pca %>% group_by(series_id) %>% summarize(
+	surface = first(surface),
+	group_id = first(group_id)
+)
+
+columns_01 <- paste("PC1_",as.character(10000 + c(1:128)), sep = "")
+tmp_01 <- data.frame(matrix(ncol = length(columns_01), nrow = 0) )
+colnames(tmp_01) <- columns_01
+
+columns_02 <- paste("PC2_",as.character(10000 + c(1:128)), sep = "")
+tmp_02 <- data.frame(matrix(ncol = length(columns_02), nrow = 0) )
+colnames(tmp_02) <- columns_02
+
+columns_03 <- paste("PC3_",as.character(10000 + c(1:128)), sep = "")
+tmp_03 <- data.frame(matrix(ncol = length(columns_03), nrow = 0) )
+colnames(tmp_03) <- columns_03
+
+for(s_id in x_series$series_id) {
+	z <- x_train_pca %>% filter(series_id == s_id)
+	
+	tmp_01 <- bind_rows(
+		tmp_01, 
+		bind_cols(data.frame(cols = columns_01), data.frame(PC1 = abs(fft(select(z, PC1)$PC1)))) %>% spread(cols, PC1)
+		)
+	
+	tmp_02 <- bind_rows(
+		tmp_02, 
+		bind_cols(data.frame(cols = columns_02), data.frame(PC2 = abs(fft(select(z, PC2)$PC2)))) %>% spread(cols, PC2)
+		)
+	
+	tmp_03 <- bind_rows(
+		tmp_03, 
+		bind_cols(data.frame(cols = columns_03), data.frame(PC3 = abs(fft(select(z, PC3)$PC3)))) %>% spread(cols, PC3)
+		)	
+}
+
+xx_train <- bind_cols(x_series, tmp_01, tmp_02, tmp_03)
 ```
 
 
@@ -81,8 +204,98 @@ xx_train <- x_train_processed %>% select(linear_acceleration_X)
 
 
 
+```{r}
+x_series <- x_test_pca %>% group_by(series_id) %>% summarize()
+
+columns_01 <- paste("PC1_",as.character(10000 + c(1:128)), sep = "")
+tmp_01 <- data.frame(matrix(ncol = length(columns_01), nrow = 0) )
+colnames(tmp_01) <- columns_01
+
+columns_02 <- paste("PC2_",as.character(10000 + c(1:128)), sep = "")
+tmp_02 <- data.frame(matrix(ncol = length(columns_02), nrow = 0) )
+colnames(tmp_02) <- columns_02
+
+columns_03 <- paste("PC3_",as.character(10000 + c(1:128)), sep = "")
+tmp_03 <- data.frame(matrix(ncol = length(columns_03), nrow = 0) )
+colnames(tmp_03) <- columns_03
+
+for(s_id in x_series$series_id) {
+	z <- x_test_pca %>% filter(series_id == s_id)
+	
+	tmp_01 <- bind_rows(
+		tmp_01, 
+		bind_cols(data.frame(cols = columns_01), select(z, PC1)) %>% spread(cols, PC1)
+		)
+	
+	tmp_02 <- bind_rows(
+		tmp_02, 
+		bind_cols(data.frame(cols = columns_02), select(z, PC2)) %>% spread(cols, PC2)
+		)
+	
+	tmp_03 <- bind_rows(
+		tmp_03, 
+		bind_cols(data.frame(cols = columns_03), select(z, PC3)) %>% spread(cols, PC3)
+		)		
+}
+
+xx_test <- bind_cols(x_series, tmp_01)
 
 
+
+
+```
+
+
+## Define the Model
+
+
+```{r}
+
+model_fit <- keras::keras_model_sequential()
+model_fit %>% 
+	layer_dense(units = 256, activation = "relu", input_shape = c(128*3), name = "layer_one") %>% 
+	layer_dropout(rate = 0.4) %>% 
+	layer_dense(units = 128, activation = "relu") %>% 
+	layer_dropout(rate = 0.3) %>% 
+	layer_dense(units = 9, activation = "softmax")
+
+summary(model_fit)
+
+```
+
+
+## Compile
+
+```{r}
+
+model_fit %>% 
+	compile(
+		loss = "categorical_crossentropy",
+		optimizer = optimizer_rmsprop(),
+		metrics = c("accuracy")
+	)
+
+
+```
+
+
+
+## Training
+
+```{r}
+xxx_train <- xx_train %>% select(-series_id, -surface, -group_id) %>% as.matrix()
+
+history <- model_fit %>% 
+	fit(
+		xxx_train, 
+		y,
+		epochs = 120, 
+		batch_size = 100,
+		validation_split = 0.2
+		)
+plot(history)
+
+```
 
 
 
