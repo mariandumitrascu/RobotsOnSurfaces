@@ -1,0 +1,262 @@
+---
+title: "Clustering"
+author: "Marian Dumitrascu"
+date: "April 6, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readr)
+library(tidyverse)
+library(ISLR)
+library(caret)
+library(orientlib)
+library(matrixStats)
+library(randomForest)
+library(RSpincalc)
+library(tictoc)
+library(kableExtra)
+
+library(doParallel)
+library(foreach)
+
+# library(nnet)
+
+library(mlbench)
+library(factoextra)
+library(cluster)
+```
+
+
+
+
+## Seelect data for clustering
+
+```{r, fig.width=16}
+# x_train_processed
+# 
+# install.packages("cluster")
+
+x_train_cl <- x_train_processed %>% 
+	select(
+		series_id, group_id,  f2,f3, dist_mean_to_sd, omega_mean_to_sd, phi_mean_all, theta_mean_all, psi_mean_all, surface
+		)
+
+```
+
+
+
+
+## Compute dist and hclust
+
+```{r, fig.width=18}
+d <- dist(select(x_train_cl, -series_id, -group_id) %>% slice(1:5000))
+
+summary(d)
+# print(as.matrix(d))
+
+h <- hclust(d, method = "complete", members = NULL)
+
+plot(h, cex = 0.65)
+
+```
+
+
+```{r}
+
+# ccut the tree in 2
+groups <- cutree(h, k=2)
+# 
+# length(groups)
+# class(groups)
+
+x_train_cl <- x_train_cl %>% mutate(group = groups)
+
+by_g <- x_train_cl %>% group_by(group, surface) %>% summarize(n = n())
+
+View (by_g)
+
+# x_train_cl %>% filter(group == 1)
+```
+
+
+## Compute k-means
+
+```{r}
+
+k <- kmeans(select(x_train_cl, -series_id, -group_id, -surface, -group) %>% as.matrix(), centers =  2)
+
+x_train_cl <- x_train_cl %>%  mutate(group_k = k$cluster)
+
+x_train_cl %>% group_by(group_k, surface) %>% summarize(n = n())
+
+
+```
+
+
+
+
+## Merge Train With Test
+
+```{r}
+
+# add source column to train data
+x_train_processed <- x_train_processed %>% 
+	mutate(
+		source = "train",
+		surface = as.character(surface)
+		)
+# add columns to test data and source
+x_test_processed <- x_test_processed %>% 
+	mutate(
+		source = "test",
+		group_id = -1,
+		surface = "unknown"
+	)
+
+x_tt <- bind_rows(x_train_processed, x_test_processed) %>% 
+	select(
+		series_id, group_id, source, surface,
+		f2, f3,
+		dist_mean_to_sd, omega_mean_to_sd, 
+		phi_mean_all, theta_mean_all, psi_mean_all,
+		dist_area, omega_area, euler_area,
+		dist_max
+		
+	) %>% 
+	mutate(surface = factor(surface))
+
+head(x_tt %>% arrange(series_id))
+
+
+```
+
+## analyze diff cluster methods
+
+```{r}
+# install.packages("mclust")
+library(mclust)
+
+# seelect only columns that should be included in clusterization
+x_tt_for_cl <- x_tt %>% select(-series_id, -group_id, -surface, -source)
+```
+
+```{r eval=FALSE, include=FALSE}
+# this finds the best model for clustering
+# this takes a long time
+fit <- Mclust(x_tt_for_cl)
+plot(fit)
+summary(fit)
+
+```
+
+
+## Analyze K-means
+
+```{r eval=FALSE, include=FALSE}
+# better exclude this chunk from overall execution, takes too long
+# 
+k2 <- kmeans(x_tt_for_cl, centers = 2, nstart = 1000)
+
+# visualize the clusters
+fviz_cluster(k2, x_tt_for_cl)
+
+# visualize optimal number of clusters
+fviz_nbclust(x_tt_for_cl, kmeans, method = "wss")
+
+# function to compute average silhouette for k clusters
+avg_sil <- function(k) {
+  km.res <- kmeans(x_tt_for_cl, centers = k, nstart = 25)
+  ss <- silhouette(km.res$cluster, dist(x_tt_for_cl))
+  mean(ss[, 3])
+}
+
+# Compute and plot wss for k = 2 to k = 15
+k.values <- 2:15
+
+# extract avg silhouette for 2-15 clusters
+avg_sil_values <- map_dbl(k.values, avg_sil)
+
+plot(k.values, avg_sil_values,
+       type = "b", pch = 19, frame = FALSE, 
+       xlab = "Number of clusters K",
+       ylab = "Average Silhouettes")
+
+```
+## one more
+
+```{r}
+
+fviz_nbclust(x_tt_for_cl, kmeans, method = "silhouette")
+
+# conclusion: optimal number of clusters is 5 but 2 is not bad either
+
+```
+
+
+
+## Choose best K and clusterize to x_tt
+
+
+```{r}
+x_tt <- x_tt %>% mutate(k2 = k2$cluster)
+x_tt %>% group_by(k2, surface) %>% summarize(n = n())
+
+```
+
+
+## hclust
+
+```{r, fig.width=16}
+
+d <- dist(x_tt_for_cl)
+h <- hclust(d, method = "complete", members = NULL)
+
+plot(h, cex = 0.65)
+
+
+```
+
+
+## test prediction using clustered sets
+
+```{r}
+tmp_x <- x_tt %>% filter(source == "train") %>% 
+	select(-source) %>% 
+	mutate(surface = as.character(surface)) %>% 
+	mutate(surface = factor(surface))
+
+x_train_for_train <- tmp_x %>% filter(k2 == 2) %>% select(-k2)
+x_train_for_test <- tmp_x %>% filter(k2 == 1) %>% select(-k2)
+
+```
+
+
+## KNN
+
+```{r}
+# use most important variables to fit KNN
+# model_fit <- train(surface ~ f3 + f2 + f3 + phi_mean_all + theta_mean_all + psi_mean_all,  method = "knn", 
+model_fit <- train(surface ~ .,  method = "knn", 
+             tuneGrid = data.frame(k = seq(2, 100, 2)), 
+             data = select(x_train_for_train, -series_id, -group_id ))
+
+ggplot(model_fit) 
+
+# get confusion matrix and display it together with the results
+y_hat <- predict(model_fit, select(x_train_for_test, -series_id, -group_id), type = "raw")
+conf_matrix <- confusionMatrix(y_hat, x_train_for_test$surface)
+
+# display confusion matrix
+conf_matrix$table %>% knitr::kable()
+```
+
+
+
+
+
+
+
+

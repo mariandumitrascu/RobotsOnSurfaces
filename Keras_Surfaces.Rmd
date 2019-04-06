@@ -7,8 +7,13 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(tidyverse)
 library(keras)
 library(caret)
+library(doParallel)
+library(foreach)
+library(tictoc)
 ```
 
 ## Load Data
@@ -21,40 +26,29 @@ x_test <- read_csv("data/x_test.csv")
 
 # join the labels with the training data set
 x_train <- x_train %>% left_join(y_train, by = "series_id")
-x_train <- as.data.frame(x_train)
+x_train <- as.data.frame(x_train) %>% mutate(surface = factor(surface, ordered = TRUE))
 x_test <- as.data.frame(x_test)
 ```
 
 ## Prepare Data
 
 ```{r}
-pre_process <- x_train %>%
-	select(-series_id, -group_id, -measurement_number, -row_id, -group_id, -surface) %>% 
-	preProcess(method = c("range"))
 
-x_train_processed <- predict(pre_process, x_train)
-x_test_processed <- predict(pre_process, x_test)
+x_train_processed <- x_train
+x_test_processed <- x_test
 
-y_train_processed <- y_train %>% select(surface) %>% 
-	mutate(surface = as.factor(surface)) %>% 
-	mutate(surface = as.numeric(surface))
+y_train_processed <- x_train %>% select(surface) %>% 
+	mutate(surface_num = as.numeric(surface))
 
-map_surface_number <- y_train %>%
-	select(surface) %>% 
-	mutate(surface_num = as.numeric(as_factor(surface))) %>% 
+map_surface_number <- y_train_processed %>%
+	select(surface, surface_num) %>% 
 	distinct()
-
-
-y_train <- y_train %>%
-	mutate(surface_num = as.numeric(as.factor(surface)))
-
-y <- keras::to_categorical(as.matrix(y_train_processed -1),9)
 
 ```
 
 ## converting back to numbers
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 tmp <- t(t(y) * c(1,2,3,4,5,6,7,8,9))
 tmp2 <- rowSums(tmp)
@@ -80,11 +74,14 @@ x_train_test <- bind_rows(
 		   angular_velocity_X, angular_velocity_Y, angular_velocity_Z))
 
 # compute pca for merged data frame
-x_pca <- prcomp(x_train_test)
+x_pca <- prcomp(x_train_test,
+				center = TRUE,
+				scale. = TRUE,
+				retx = TRUE)
 summary(x_pca)
 
 # pre-process again
-xx <- data.frame(x_pca$x[,1:3])
+xx <- data.frame(x_pca$x[,1:8])
 
 pre_process <- xx %>% preProcess(c("range"))
 xx <- predict(pre_process, xx)
@@ -96,8 +93,8 @@ x_pca_train <- xx %>% slice(1:nrow(x_train))
 
 # extract the data frame from pca for x_test
 start <- nrow(x_train)+1
-end <- nrow(x_train)+nrow(x_test)+1
-x_pca_test <- data.frame(x_pca$x[,1:3]) %>% slice(start:end)
+end <- nrow(x_train_test)
+x_pca_test <- data.frame(x_pca$x[,1:8]) %>% slice(start:end)
 
 # reconstruct x_train
 x_train_pca <- bind_cols(select(x_train, series_id, group_id, surface), x_pca_train)
@@ -105,14 +102,21 @@ x_train_pca <- bind_cols(select(x_train, series_id, group_id, surface), x_pca_tr
 # reconstruct x_test
 x_test_pca <- bind_cols(select(x_test, series_id), x_pca_test)
 
-rm(x_pca_train, x_pca_test, xx)
+# rm(x_pca_train, x_pca_test, xx)
 ```
+
+
+```{r}
+
+
+```
+
 
 
 ## Prepare x_train and x_test
 
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 x_series <- x_train_pca %>% group_by(series_id) %>% summarize(
 	surface = first(surface),
@@ -157,52 +161,160 @@ xx_train <- bind_cols(x_series, tmp_01, tmp_02, tmp_03)
 ```
 
 
-
+## Function to process data
 
 ```{r}
-x_series <- x_train_pca %>% group_by(series_id) %>% summarize(
-	surface = first(surface),
-	group_id = first(group_id)
-)
 
-columns_01 <- paste("PC1_",as.character(10000 + c(1:128)), sep = "")
-tmp_01 <- data.frame(matrix(ncol = length(columns_01), nrow = 0) )
-colnames(tmp_01) <- columns_01
-
-columns_02 <- paste("PC2_",as.character(10000 + c(1:128)), sep = "")
-tmp_02 <- data.frame(matrix(ncol = length(columns_02), nrow = 0) )
-colnames(tmp_02) <- columns_02
-
-columns_03 <- paste("PC3_",as.character(10000 + c(1:128)), sep = "")
-tmp_03 <- data.frame(matrix(ncol = length(columns_03), nrow = 0) )
-colnames(tmp_03) <- columns_03
-
-for(s_id in x_series$series_id) {
-	z <- x_train_pca %>% filter(series_id == s_id)
+process_data <- function(x_current)
+{
+	x_series <- x_current %>% group_by(series_id) %>% summarize(
+		# surface = first(surface)
+	)
 	
-	x_dwt <- modwt(z$PC1, wf="haar", n.levels=7, boundary="periodic")
-	tmp_01 <- bind_rows(
-		tmp_01, 
-		bind_cols(data.frame(cols = columns_01), data.frame(PC1 = abs(fft(x_dwt$d2)) )) %>% spread(cols, PC1)
-		)
+	columns_11 <- paste("PC_11_",as.character(10000 + c(1:128)), sep = "")
+	columns_21 <- paste("PC_21_",as.character(10000 + c(1:128)), sep = "")
+	columns_12 <- paste("PC_12_",as.character(10000 + c(1:128)), sep = "")
+	columns_22 <- paste("PC_22_",as.character(10000 + c(1:128)), sep = "")
+	columns_13 <- paste("PC_13_",as.character(10000 + c(1:128)), sep = "")
+	columns_23 <- paste("PC_23_",as.character(10000 + c(1:128)), sep = "")
+	columns_14 <- paste("PC_14_",as.character(10000 + c(1:128)), sep = "")
+	columns_24 <- paste("PC_24_",as.character(10000 + c(1:128)), sep = "")
 	
-	x_dwt <- modwt(z$PC2, wf="haar", n.levels=7, boundary="periodic")
-	tmp_02 <- bind_rows(
-		tmp_02, 
-		bind_cols(data.frame(cols = columns_02), data.frame(PC2 = abs(fft(x_dwt$d2)) )) %>% spread(cols, PC2)
-		)
+	result <- foreach(s_id = x_series$series_id, .combine = "rbind", .packages = c("tidyverse", "waveslim", "stats")) %dopar%
+	{
+		z <- x_current %>% filter(series_id == s_id)
+		wavelet = "haar"
+		
+		# x_dwt <- modwt(z$PC1, wf=wavelet, n.levels=1, boundary="periodic")
+		# tmp_11 <- bind_cols(data.frame(cols = columns_11), data.frame(PC_11 = abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_11)
+		# tmp_21 <- bind_cols(data.frame(cols = columns_21), data.frame(PC_21 = abs(fft(x_dwt$s1)) )) %>% spread(cols, PC_21)
+		# 
+		# x_dwt <- modwt(z$PC2, wf=wavelet, n.levels=1, boundary="periodic")
+		# tmp_12 <- bind_cols(data.frame(cols = columns_12), data.frame(PC_12 = abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_12)
+		# tmp_22 <- bind_cols(data.frame(cols = columns_22), data.frame(PC_22 = abs(fft(x_dwt$s1)) )) %>% spread(cols, PC_22)
+		# 	
+		# 
+		# x_dwt <- modwt(z$PC3, wf=wavelet, n.levels=1, boundary="periodic")
+		# tmp_13 <- bind_cols(data.frame(cols = columns_13), data.frame(PC_13 =  abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_13)
+		# tmp_23 <- bind_cols(data.frame(cols = columns_23), data.frame(PC_23 =  abs(fft(x_dwt$s1)) )) %>% spread(cols, PC_23)
+		# 
+		# x_dwt <- modwt(z$PC4, wf=wavelet, n.levels=1, boundary="periodic")
+		# tmp_14 <- bind_cols(data.frame(cols = columns_14), data.frame(PC_14 =  abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_14)
+		# tmp_24 <- bind_cols(data.frame(cols = columns_24), data.frame(PC_24 =  abs(fft(x_dwt$s1)) )) %>% spread(cols, PC_24)
+		
+		x_dwt <- modwt(z$PC1, wf=wavelet, n.levels=1, boundary="periodic")
+		tmp_11 <- bind_cols(data.frame(cols = columns_11), data.frame(PC_11 = abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_11)
+		
+		x_dwt <- modwt(z$PC2, wf=wavelet, n.levels=1, boundary="periodic")
+		tmp_21 <- bind_cols(data.frame(cols = columns_21), data.frame(PC_21 = abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_21)
+		
+		x_dwt <- modwt(z$PC3, wf=wavelet, n.levels=1, boundary="periodic")
+		tmp_12 <- bind_cols(data.frame(cols = columns_12), data.frame(PC_12 = abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_12)
+		
+		x_dwt <- modwt(z$PC4, wf=wavelet, n.levels=1, boundary="periodic")
+		tmp_22 <- bind_cols(data.frame(cols = columns_22), data.frame(PC_22 = abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_22)
+		
+		x_dwt <- modwt(z$PC5, wf=wavelet, n.levels=1, boundary="periodic")
+		tmp_13 <- bind_cols(data.frame(cols = columns_13), data.frame(PC_13 =  abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_13)
+		
+		x_dwt <- modwt(z$PC6, wf=wavelet, n.levels=1, boundary="periodic")
+		tmp_23 <- bind_cols(data.frame(cols = columns_23), data.frame(PC_23 =  abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_23)
+		
+		x_dwt <- modwt(z$PC7, wf=wavelet, n.levels=1, boundary="periodic")
+		tmp_14 <- bind_cols(data.frame(cols = columns_14), data.frame(PC_14 =  abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_14)
+
+		x_dwt <- modwt(z$PC8, wf=wavelet, n.levels=1, boundary="periodic")
+		tmp_24 <- bind_cols(data.frame(cols = columns_24), data.frame(PC_24 =  abs(fft(x_dwt$d1)) )) %>% spread(cols, PC_24)
+		
+		
+		# return from foreach
+		bind_cols(
+			tmp_11, 
+			tmp_21, 
+			tmp_12, 
+			tmp_22, 
+			tmp_13, 
+			tmp_23,
+			tmp_14, 
+			tmp_24
+			)
+	}
 	
-	x_dwt <- modwt(z$PC3, wf="haar", n.levels=7, boundary="periodic")
-	tmp_03 <- bind_rows(
-		tmp_03, 
-		bind_cols(data.frame(cols = columns_03), data.frame(PC3 =  abs(fft(x_dwt$d2)) )) %>% spread(cols, PC3)
-		)	
+	# agregate the output
+	x_result <- bind_cols(x_series, result)
 }
-
-xx_train <- bind_cols(x_series, tmp_01, tmp_02, tmp_03)
 ```
 
 
+## Process data
+
+```{r}
+
+x_train_pca %>% filter(series_id==0)
+
+cl <- makePSOCKcluster(16)
+registerDoParallel(cl)
+
+tic("processing training data")
+xx_train <- process_data(x_train_pca)
+toc()
+
+tic("processing test data")
+xx_test <- process_data(x_test_pca)
+toc()
+
+stopCluster(cl)
+
+# pre_process <- xx_train %>%
+# 	select(-series_id) %>% 
+# 	preProcess(method = c("range"))
+# 
+# xx_train <- predict(pre_process, xx_train)
+# xx_test <- predict(pre_process, xx_test)
+# 
+# head(xx_train, 100)
+# head(xx_test, 100)
+```
+
+
+## Save processed data
+
+```{r}
+write_csv(xx_train, "data/xx_train.csv")
+write_csv(xx_test, "data/xx_test.csv")
+
+```
+
+
+## Load processed data
+
+```{r}
+xx_train <- read_csv("data/xx_train.csv")
+xx_test <- read_csv("data/xx_test.csv")
+
+
+```
+
+
+## Partition data
+
+```{r}
+x_train_series <- x_train %>% group_by(series_id) %>% summarize(surface = first(surface))
+test_index <- createDataPartition(y = x_train_series$surface, times = 1, p = 0.4, list = FALSE)
+x_train_for_train <- xx_train[-test_index, ]
+x_train_for_test <- xx_train[test_index, ]
+
+tmp_y <- select(x_train_series, surface) %>% mutate(surface_num = as.numeric(surface))
+y <- keras::to_categorical(as.matrix(select(tmp_y,surface_num)) -1,9)
+
+y_for_train <- y[-test_index, ]
+y_for_test <- y[test_index, ]
+y_for_test_labels  <- x_train_series[test_index, ] %>% select(surface)
+
+dim(y_for_train)
+dim(y_for_test)
+rm(tmp_y)
+```
 
 
 
@@ -249,19 +361,18 @@ xx_test <- bind_cols(x_series, tmp_01)
 ```
 
 
-## Define the Model
-
+## General dense modeel
 
 ```{r}
 
 model_fit <- keras::keras_model_sequential()
 model_fit %>% 
-	layer_dense(units = 128, activation = "relu", input_shape = c(128*3), name = "layer_one") %>% 
+	layer_dense(units = 128, activation = "relu", input_shape = c(128*8), name = "layer_one") %>% 
 	layer_dense(units = 128, activation = "relu") %>% 
-	layer_dense(units = 128, activation = "relu") %>% 
-	layer_dropout(rate = 0.4) %>% 
+	layer_dropout(rate = 0.5) %>% 
 	layer_dense(units = 64, activation = "relu") %>% 
-	layer_dropout(rate = 0.3) %>% 
+	layer_dense(units = 64, activation = "relu") %>% 
+	layer_dropout(rate = 0.4) %>% 
 	layer_dense(units = 9, activation = "softmax")
 
 
@@ -277,26 +388,45 @@ summary(model_fit)
 ```
 
 
-## Compile
+
+## Model using 1D convolution 
 
 ```{r}
+model_fit <- keras::keras_model_sequential()
+model_fit %>% 
+	# layer_dense(units = 128, activation = "relu", input_shape = c(128*3), name = "layer_one") %>% 
+		layer_reshape(target_shape = c(128, 8), input_shape = c(128*8)) %>% 
+		layer_conv_1d(100, 10, activation = "relu", input_shape = c(128, 8)) %>% 
+		layer_conv_1d(100, 10, activation = "relu") %>%
+		layer_max_pooling_1d(3) %>% 
+		layer_conv_1d(160, 10, activation = "relu") %>%
+		layer_conv_1d(160, 10, activation = "relu") %>%
+		layer_global_average_pooling_1d() %>% 
+		layer_dropout(rate = 0.4) %>% 
+		layer_dense(units = 9, activation = "softmax")
 
 
+model_fit %>% 
+	compile(
+		loss = "categorical_crossentropy",
+		optimizer = optimizer_rmsprop(),
+		metrics = c("accuracy")
+	)
 
+summary(model_fit)
 ```
-
 
 
 ## Training
 
 ```{r}
-xxx_train <- xx_train %>% select(-series_id, -surface, -group_id) %>% as.matrix()
+xxx_train <- x_train_for_train %>% select(-series_id) %>% as.matrix()
 
 history <- model_fit %>% 
 	fit(
 		xxx_train, 
-		y,
-		epochs = 140, 
+		y_for_train,
+		epochs = 30, 
 		batch_size = 100,
 		validation_split = 0.2
 		)
@@ -304,12 +434,87 @@ plot(history)
 
 ```
 
+## Confusion Matrix
+
+```{r}
+xxx_test <- x_train_for_test %>% select(-series_id) %>% as.matrix()
+score <- model_fit %>% evaluate(xxx_test, y_for_test)
+score
+
+y_predicted <- predict_classes(model_fit, xxx_test)
+tmp_01 <- data.frame(surface_num = y_predicted + 1)
+y_predicted <- tmp_01 %>% inner_join(map_surface_number, by = c("surface_num")) %>% select(surface)
+
+tmp_y1 <- y_predicted %>% mutate(surface = as.character(surface)) 
+tmp_y2 <- y_for_test_labels %>% mutate(surface = as.character(surface))
+tmp_y3 <- bind_rows(tmp_y1, tmp_y2) %>%  mutate(surface = factor(surface)) 
+tmp_y1 <- tmp_y3 %>% slice(1:nrow(tmp_y1))
+
+start <- nrow(tmp_y1) + 1
+end <- nrow(tmp_y3)
+tmp_y2 <- tmp_y3 %>% slice(start:end)
+
+levels(y_predicted$surface)
+levels(y_for_test_labels$surface)
+conf_matrix <- caret::confusionMatrix(
+	tmp_y1$surface, 
+	tmp_y2$surface)
+
+conf_matrix
+conf_matrix$overall["Accuracy"]
+
+```
+
+
+
+
+## Predict the test
+
+```{r}
+
+
+x_to_be_predicted <- xx_test %>% select(-series_id) %>% as.matrix()
+y_predicted <- predict_classes(model_fit, x_to_be_predicted)
+
+max(y_predicted+1)
+
+
+tmp_01 <- data.frame(surface_num = y_predicted + 1)
+tmp_02 <- tmp_01 %>% inner_join(map_surface_number, by = c("surface_num")) %>% select(surface)
+
+submission <- bind_cols(x_series, tmp_02)
+write_csv(submission, "data/submission_keras_24.csv")
+```
 
 
 
 
 
-
+```{r}
+data(ibm)     
+ibm.returns <- diff(log(ibm))
+# Haar
+ibmr.haar <- modwt(ibm.returns, "haar")
+names(ibmr.haar) <- c("w1", "w2", "w3", "w4", "v4")
+# LA(8)
+ibmr.la8 <- modwt(ibm.returns, "la8")
+names(ibmr.la8) <- c("w1", "w2", "w3", "w4", "v4")
+# shift the MODWT vectors
+ibmr.la8 <- phase.shift(ibmr.la8, "la8")
+## plot partial MODWT for IBM data
+par(mfcol=c(6,1), pty="m", mar=c(5-2,4,4-2,2))
+plot.ts(ibm.returns, axes=FALSE, ylab="", main="(a)")
+for(i in 1:5)
+  plot.ts(ibmr.haar[[i]], axes=FALSE, ylab=names(ibmr.haar)[i])
+axis(side=1, at=seq(0,368,by=23), 
+  labels=c(0,"",46,"",92,"",138,"",184,"",230,"",276,"",322,"",368))
+par(mfcol=c(6,1), pty="m", mar=c(5-2,4,4-2,2))
+plot.ts(ibm.returns, axes=FALSE, ylab="", main="(b)")
+for(i in 1:5)
+  plot.ts(ibmr.la8[[i]], axes=FALSE, ylab=names(ibmr.la8)[i])
+axis(side=1, at=seq(0,368,by=23), 
+  labels=c(0,"",46,"",92,"",138,"",184,"",230,"",276,"",322,"",368))
+```
 
 
 
